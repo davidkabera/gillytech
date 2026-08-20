@@ -6,7 +6,7 @@ import react from '@astrojs/react';
 import { LikeC4VitePlugin } from 'likec4/vite-plugin';
 import { rehypeBaseLinks } from './src/plugins/rehype-base-links.mjs';
 
-const base = '/gilli-tech';
+const base = '/gillytech';
 
 // https://astro.build/config
 export default defineConfig({
