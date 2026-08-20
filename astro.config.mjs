@@ -61,6 +61,12 @@ export default defineConfig({
 						{ label: 'ADR-007', slug: 'adrs/adr-007' },
 					],
 				},
+				{
+					label: 'Deployment',
+					items: [
+						{ label: 'Deployment Runbook', slug: 'deployment/deployment-runbook' },
+					],
+				},
 			],
 		}),
 		react(),
