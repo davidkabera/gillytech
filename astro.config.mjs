@@ -31,7 +31,7 @@ export default defineConfig({
 		starlight({
 			title: 'Gillytech',
 			description: 'Architecture documentation for Gillytech — a collaborative STEM reasoning platform for CBC classrooms.',
-			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/gillytech/gillytech' }],
+			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/cto-kabera/gillytech' }],
 			sidebar: [
 				{
 					label: 'Requirements',
