@@ -58,6 +58,7 @@ export default defineConfig({
 						{ label: 'ADR-004', slug: 'adrs/adr-004' },
 						{ label: 'ADR-005', slug: 'adrs/adr-005' },
 						{ label: 'ADR-006', slug: 'adrs/adr-006' },
+						{ label: 'ADR-007', slug: 'adrs/adr-007' },
 					],
 				},
 			],
