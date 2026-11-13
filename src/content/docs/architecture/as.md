@@ -78,13 +78,15 @@ boundary — keeping Force A's latency budget easy to meet.
 |-----|------------------------------|
 | **ASR-01** (server-side correctness, no answer-key leakage) | The layered structure puts a clear boundary between the "question for client" shape and the "submission result" shape, both produced by the same repository data but serialised differently by the route handler — see [ADR-002](/adrs/adr-002/) and AC-NF-SEC-05. |
 | **ASR-02** (5s real-time delivery) | In-process broadcast ([ADR-003](/adrs/adr-003/)) means delivering an event is a synchronous function call plus WebSocket `send()` — no queue, no second process, no serialization-over-network overhead. |
-| **ASR-03** (500ms submission p90) | The submission route does only what F-SUB-01–06 require; analytics aggregation is explicitly *not* on this path ([ADR-005](/adrs/adr-005/)). Layering keeps this path short: route → repository → response. |
+| **ASR-03** (500ms submission p90) | The submission route does only what F-SUB-01–07 require (including O(1) `deriveTiming`); analytics and history aggregation are explicitly *not* on this path ([ADR-005](/adrs/adr-005/)). Layering keeps this path short: route → repository → response. |
 | **ASR-04** (replaceable data store) | The repository layer ([ADR-004](/adrs/adr-004/)) is the seam. Because the architecture is already layered, this seam already exists — it didn't need to be retrofitted. |
 | **ASR-05 / ASR-06** (auth & group-scoping enforced server-side) | Shared middleware ([ADR-002](/adrs/adr-002/)) and a server-populated connection registry ([ADR-003](/adrs/adr-003/)) mean both the REST and event-driven halves enforce the same rules from the same source of truth (the repository layer). |
 | **ASR-07** (multiple concurrent sessions) | The connection registry is partitioned by `sessionId` ([ADR-003](/adrs/adr-003/)), so the cost of a broadcast is bounded by that session's connection count, not the platform-wide total. |
 | **ASR-08** (new question types without contract changes) | The generic `content_json`/`type` question schema ([ADR-004](/adrs/adr-004/)) is a data-layer concern; because routes are thin and delegate to repositories, adding a `type` branch in one scoring function doesn't ripple through the layers. |
 | **ASR-09** (hashed passwords) | A standard concern of the auth layer ([ADR-002](/adrs/adr-002/)); the layered style doesn't complicate this, it just gives it one obvious home. |
 | **ASR-10** (2s analytics p90) | Analytics is its own route/handler that aggregates from the repository on demand ([ADR-005](/adrs/adr-005/)) — isolated from the submission path by the same layering that protects ASR-03. |
+| **ASR-12** (observational timing, no raw streams) | Client marks ride on the existing submission POST as offsets; the server trusts only its own anchors. No new telemetry service or event-stream store — the repository seam ([ADR-004](/adrs/adr-004/)) already holds the additive `timing` block. |
+| **ASR-13** (1s student history p90) | Same on-read strategy as ASR-10 ([ADR-005](/adrs/adr-005/)), scoped to one student's submissions rather than a whole class, served through the student route layer with JWT-derived identity (ASR-05). |
 
 The headline fit argument: **every ASR is satisfiable by a seam that the
 layered-monolith-plus-broadcast-overlay style already provides "for free"**

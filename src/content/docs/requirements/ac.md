@@ -161,6 +161,27 @@ Then a badge of type "first_correct" is created for that student,
   associated with the session
 ```
 
+### AC-SUB-07 — Reasoning-time telemetry captured observationally (F-SUB-07)
+
+```gherkin
+Given a student is viewing a question that the server advanced
+  via question_advance (F-SES-05)
+When the student types reasoning, selects an option, and submits
+Then the submission payload includes client timing marks as offsets
+  from question render (not wall-clock times)
+And the server persists a StoredTiming block whose questionShownAt
+  and submittedAt are its own timestamps
+And totalTimeMs is derived from those server anchors
+And client marks are clamped and stored as observational
+And the timing values are NOT added to the F-SUB-05 score
+
+Given the client marks are internally inconsistent
+  (e.g. activeReasoningMs exceeds totalTimeMs beyond skew tolerance)
+When the server derives StoredTiming
+Then flags.clientMarksDropped is true
+And the observational client fields are nulled or zeroed
+```
+
 ---
 
 ## 4.3 Real-Time Group Collaboration
@@ -352,6 +373,101 @@ And does NOT include questions saved by other teachers
 
 ---
 
+## 4.7 Student Reasoning History
+
+### AC-HIST-01 — History shows reasoning, answers, and score breakdown (F-HIST-01, F-HIST-04)
+
+```gherkin
+Given a student who submitted reasoning of more than 20 characters
+  and a wrong answer
+When they open their profile and request GET /api/student/history
+Then the entry shows their reasoning text, the incorrect selection,
+  the correct answer, isCorrect = false
+And score.reasoningBonus = 2, score.base = 0, score.total = 2
+And reasoningCharCount matches the submitted text length
+```
+
+### AC-HIST-02 — Own history only; client-supplied student id ignored (F-HIST-02)
+
+```gherkin
+Given student A is authenticated
+When A requests history carrying student B's id
+Then the system ignores the supplied id and returns only A's history
+  (or 403 on an id-scoped route)
+And B's submissions are not present in the response
+```
+
+### AC-HIST-03 — Unanswered questions and their keys are omitted (F-HIST-03, NF-SEC-05)
+
+```gherkin
+Given a question in an active session the student has not yet answered
+When the student fetches history
+Then that question and its correct answer do not appear
+```
+
+### AC-HIST-04 — Filter by session and page newest first (F-HIST-05)
+
+```gherkin
+Given a student has submissions in sessions "S-1" and "S-2"
+When they request GET /api/student/history?sessionId=S-1&limit=20
+Then the response contains only S-1 entries
+And entries are ordered by submittedAt descending
+And nextCursor is present when more than 20 matching entries exist
+```
+
+### AC-HIST-05 — Feedback field is null until the evaluator ships (F-HIST-06)
+
+```gherkin
+Given the AI reasoning evaluator is not yet available
+When a student fetches history
+Then each entry's feedback field is null
+```
+
+### AC-DL-01 — Digital-literacy covariate is not a score (F-DL-01)
+
+```gherkin
+Given a student has completed the onboarding self-report
+  and has subsequent reasoning submissions
+When the system stores the digital-literacy covariate
+Then it stores derived and aggregate values only
+  (selfReportScore, typingRate, correctionRate, onboardingMs, joinAttempts)
+And it does not persist a raw keystroke or pointer stream
+And the covariate is stored separately from CBC competency indicators
+And it does not contribute to any student score
+```
+
+### AC-COLLAB-01 — Collaboration indicators derived from group chat (F-COLLAB-01)
+
+```gherkin
+Given a session whose group chat has been persisted (F-CHAT-03)
+When the system derives collaboration indicators for a student
+Then the record includes participation, perspective-taking,
+  and social-regulation sub-dimension scores plus a composite
+And the values are computed from that student's group chat,
+  not from a self-report
+```
+
+### AC-COLLAB-02 — Exploratory until validated; not graded (F-COLLAB-02)
+
+```gherkin
+Given automated chat coding has not been validated against human coding
+When collaboration indicators are stored or shown
+Then validationStatus is "exploratory"
+And the composite does not contribute to any graded student score
+And the indicator is stored separately from F-DL-01 and
+  the F-ANA-04 reasoning-quality indicator
+```
+
+### AC-COLLAB-03 — Code-switching counted equivalently (F-COLLAB-03)
+
+```gherkin
+Given a group chat containing English, Kiswahili, and mixed-language turns
+When the chat coder classifies contributions
+Then contributions in any supported language are counted equivalently
+```
+
+---
+
 ## Non-Functional Acceptance Criteria (Selected)
 
 ### AC-NF-PERF-01 — Submission latency budget (NF-PERF-01 / ASR-03)
@@ -372,6 +488,14 @@ When a chat message is sent in one session
 Then the p90 delivery time to other members of the same group
   is at most 5 seconds
 And delivery times in the other 9 sessions are unaffected
+```
+
+### AC-NF-PERF-04 — Student history latency budget (NF-PERF-04 / ASR-13)
+
+```gherkin
+Given a student with submissions across 20 sessions
+When they request GET /api/student/history
+Then the p90 response time is at most 1 second
 ```
 
 ### AC-NF-SEC-05 — Answer key not leaked before submission (NF-SEC-05 / ASR-01)

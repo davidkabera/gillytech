@@ -33,6 +33,7 @@ watch the whole class think in real time — not just see a final score.
 - Submit written reasoning before selecting an answer (the reasoning-first gate)
 - Collaborate in real-time group chat scoped to their assigned group
 - Track live leaderboards and earn badges
+- Review their own per-question reasoning history (written reasoning, answers, score breakdown, and timing)
 
 **For teachers (authoring and monitoring):**
 - Create classes, generate join codes, manage rosters
@@ -78,4 +79,7 @@ them.
   contract, to ease a future PostgreSQL migration.
 - Because all student users are minors, only name and school-issued email
   are collected — no public-facing profile or messaging outside group
-  chat.
+  chat. A student may view their own private reasoning history.
+- Interaction telemetry and chat-derived indicators are stored as derived
+  or aggregate values only; raw keystroke, pointer, and chat-event streams
+  are not persisted.

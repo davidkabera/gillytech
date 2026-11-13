@@ -28,7 +28,8 @@ elements/decisions it drives (cross-referenced to ADRs).
 | ASR-09 | Passwords must never be stored in plaintext; all credential storage must use salted one-way hashing. | NF-SEC-01 | Security | Drives the choice of `bcryptjs` in the auth module and excludes credential storage from any cache or analytics export. See [ADR-002](/adrs/adr-002/). |
 | ASR-10 | Teacher analytics (leaderboards, per-question stats, CBC indicators) for a class of 40 students / 20 questions must return within 2 seconds (p90). | NF-PERF-03 | Performance | Drives "compute analytics on read, not on write" ([ADR-005](/adrs/adr-005/)), keeping the submission hot path (ASR-03) lightweight while accepting a bounded read-time cost for teacher-facing views. |
 | ASR-11 | First-time students must be able to complete the reasoning-first flow (write reasoning, then select an answer) without external help. | Usability scenario (SRS §5.4) | Usability | Driven entirely by client-side UI: a visually distinct two-phase layout and a progress indicator showing the 20-character minimum (AC-SUB-01). No backend architectural driver currently addresses this — see [Notes on Usability & Interaction Telemetry](#notes-on-usability--interaction-telemetry) below. |
-| ASR-12 | Aggregated, non-biometric interaction timing (e.g. time-to-first-keystroke, reasoning duration, revision count, decision latency after options unlock) may be captured per submission to support UX research into ASR-11. | Usability scenario (SRS §5.4), informed by SRS §5.5 Business Rules (minor-user data minimisation) | Usability / Privacy | Additive, aggregated fields on the existing submission record — **not** a raw event stream and **not** a new collection. See [ADR-004](/adrs/adr-004/) (Repository Pattern & Question Schema) and the notes below. |
+| ASR-12 | Per-submission reasoning-time and writing-process telemetry (F-SUB-07) shall be captured as aggregated, non-biometric marks: server timestamps are authoritative; client offsets are observational and must never feed a score. Raw keystroke/pointer streams are not stored. | F-SUB-07, F-DL-01, F-COLLAB, SRS §5.5 (minor-user data minimisation, DPA 2019) | Usability / Privacy | Additive `timing` / covariate / collaboration-indicator fields on existing records — **not** a raw event stream and **not** a new telemetry service. See [ADR-004](/adrs/adr-004/), [ADR-005](/adrs/adr-005/), and the notes below. |
+| ASR-13 | The student history endpoint must respond within 1 second (p90) for a single student across up to 20 sessions. | NF-PERF-04 | Performance | Same compute-on-read strategy as ASR-10, scoped to one student. Drives `GET /api/student/history` as a repository read (F-HIST) with no work on the submission hot path. See [ADR-005](/adrs/adr-005/). |
 
 ## Coverage Check
 
@@ -39,6 +40,7 @@ Every non-functional requirement from SRS Section 5 maps to at least one ASR:
 | NF-PERF-01 | ASR-03 |
 | NF-PERF-02 | ASR-02, ASR-07 |
 | NF-PERF-03 | ASR-10 |
+| NF-PERF-04 | ASR-13 |
 | NF-SEC-01  | ASR-09 |
 | NF-SEC-02  | ASR-05 |
 | NF-SEC-03  | ASR-05 |
@@ -48,8 +50,8 @@ Every non-functional requirement from SRS Section 5 maps to at least one ASR:
 The Modifiability/Extensibility and Scalability scenarios from Section 5.4
 (not numbered as standalone NFRs in the SRS) are covered by ASR-04, ASR-07,
 and ASR-08. The **Usability** scenario from Section 5.4 (90% first-time
-task-completion rate) is covered by ASR-11, with ASR-12 as a supporting,
-not-yet-committed measurement mechanism.
+task-completion rate) is covered by ASR-11, with ASR-12 as the committed
+measurement mechanism (F-SUB-07).
 
 ## Notes on Usability & Interaction Telemetry
 
@@ -73,40 +75,44 @@ threshold itself is already enforced twice: client-side for the UX gate
 bonus), so the number is shared but the enforcement mechanisms are
 independent.
 
-**Measuring ASR-11 (ASR-12) — deliberately constrained scope.** To find
-out *whether* ASR-11 is being met (rather than assert it once at
-pilot-observation time), the natural approach is to capture interaction
-timing per submission. This is scoped narrowly and deliberately:
+**Measuring ASR-11 (ASR-12) — now specified as F-SUB-07.** To find out
+*whether* ASR-11 is being met (rather than assert it once at
+pilot-observation time), F-SUB-07 captures interaction timing per
+submission. The scope remains narrow and deliberate:
 
-- **Aggregated only** — e.g. `time_to_first_keystroke_ms`,
-  `total_reasoning_duration_ms`, `backspace_count`,
-  `time_to_first_click_after_unlock_ms`, `option_hover_count` — computed
-  client-side and sent once per submission.
+- **Aggregated only** — client offsets (`firstKeystrokeOffsetMs`,
+  `activeReasoningMs`, `editCount`, change-based writing-process marks)
+  sent once per submission; server derives `StoredTiming` against its own
+  `questionShownAt` / `submittedAt` anchors.
+- **Observational, never scored.** Client marks can be wrong (clock skew,
+  backgrounded tab, shared-device handoff). They must not feed F-SUB-05.
+  Inconsistent marks are dropped wholesale (`clientMarksDropped`).
 - **Never raw event streams.** Individual `keydown`/`mousemove` timestamps
-  are not captured or transmitted. Raw keystroke/pointer cadence is a
-  recognised behavioural biometric and, combined with SRS §5.5's rule that
-  "no personally identifying information beyond name and school-issued
-  email is collected" for a population of minors, storing it would sit in
-  direct tension with an existing business rule — not just a vague privacy
-  concern.
+  are not captured or transmitted. Writing-process metrics are
+  change-based estimates from textarea length deltas, not a keydown log.
+  Raw keystroke/pointer cadence is a recognised behavioural biometric
+  and, combined with SRS §5.5's rule that "no personally identifying
+  information beyond name and school-issued email is collected" for a
+  population of minors, storing it would sit in direct tension with an
+  existing business rule — not just a vague privacy concern. The same
+  derived-only rule applies to F-DL-01 and F-COLLAB.
 - **Data shape:** additive fields on the existing `submissions` record
   (see [ADR-004](/adrs/adr-004/)'s generic schema approach), not a new
   collection or a separate telemetry service. This keeps ASR-12 from
   requiring any new architectural seam — it rides on the same
   repository-pattern boundary already established for ASR-04/ASR-08.
 - **Must not threaten ASR-03.** The aggregated payload is small and
-  computed client-side before the single submission POST, so it adds
-  negligible weight to the 500ms (p90) submission budget — unlike a
-  streaming approach, which would not be free.
+  computed client-side before the single submission POST; server-side
+  `deriveTiming` is O(1). Unlike a streaming approach, this is free
+  relative to the 500ms (p90) submission budget.
 
-**Status:** ASR-12 is recorded here as a *candidate* measurement
-mechanism, not yet a committed decision. Before implementation, it should
-go through the same data-minimisation review implied by SRS §5.5 —
-specifically, confirmation that aggregated timing data (even without raw
-event capture) is acceptable for a minor-user population under Kenya's
-Data Protection Act 2019. No ADR has been written for ASR-12 for this
-reason; one should be added (proposing the specific field additions to the
-submission schema) once that review is complete.
+**Status:** ASR-12 is a committed measurement mechanism, specified by
+F-SUB-07 / SRS §4.7. Capture still requires school and guardian consent,
+a stated retention limit, and a deletion path under the Kenya Data
+Protection Act 2019 (SRS §5.5). No separate telemetry ADR is required:
+the field additions sit on the existing submission schema
+([ADR-004](/adrs/adr-004/)) and the derive step sits on the existing
+submission hot path ([ADR-005](/adrs/adr-005/)).
 
 ## Notes on Prioritisation
 
@@ -119,6 +125,11 @@ up-front in the form of a repository abstraction and a generic question
 schema, in exchange for avoiding a costly rewrite when the data store or
 question types change.
 
-ASR-03, ASR-07, and ASR-10 are **performance budgets** that should be
-exercised by load tests before each release, using the concurrency profile
-described (40 students/session, up to 10 concurrent sessions).
+ASR-03, ASR-07, ASR-10, and ASR-13 are **performance budgets** that should
+be exercised by load tests before each release, using the concurrency
+profile described (40 students/session, up to 10 concurrent sessions;
+history: one student across 20 sessions).
+
+ASR-12 is **must-have for capture, must-not for scoring** — timing and
+writing-process marks ship with the submission, but they remain
+observational engagement signals and must stay off the F-SUB-05 score.
